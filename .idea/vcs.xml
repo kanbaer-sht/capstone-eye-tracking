@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="VcsDirectoryMappings">
-    <mapping directory="$USER_HOME$/aiortc" vcs="Git" />
-    <mapping directory="$USER_HOME$/janus" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../aiortc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../janus" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../nodeflux-aiortc" vcs="Git" />
   </component>
 </project>

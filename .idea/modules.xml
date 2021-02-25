@@ -3,9 +3,10 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/EyeTracking.iml" filepath="$PROJECT_DIR$/.idea/EyeTracking.iml" />
-      <module fileurl="file://$USER_HOME$/Downloads/Gaze_Tracking-master/.idea/Gaze_Tracking-master.iml" filepath="$USER_HOME$/Downloads/Gaze_Tracking-master/.idea/Gaze_Tracking-master.iml" />
-      <module fileurl="file://$USER_HOME$/aiortc/.idea/aiortc.iml" filepath="$USER_HOME$/aiortc/.idea/aiortc.iml" />
-      <module fileurl="file://$USER_HOME$/janus/.idea/janus.iml" filepath="$USER_HOME$/janus/.idea/janus.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../Downloads/Gaze_Tracking-master/.idea/Gaze_Tracking-master.iml" filepath="$PROJECT_DIR$/../Downloads/Gaze_Tracking-master/.idea/Gaze_Tracking-master.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../aiortc/.idea/aiortc.iml" filepath="$PROJECT_DIR$/../aiortc/.idea/aiortc.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../janus/.idea/janus.iml" filepath="$PROJECT_DIR$/../janus/.idea/janus.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../nodeflux-aiortc/.idea/nodeflux-aiortc.iml" filepath="$PROJECT_DIR$/../nodeflux-aiortc/.idea/nodeflux-aiortc.iml" />
     </modules>
   </component>
 </project>
