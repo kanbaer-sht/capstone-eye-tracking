@@ -7,7 +7,7 @@
     <orderEntry type="module" module-name="aiortc" />
     <orderEntry type="module" module-name="Gaze_Tracking-master" />
     <orderEntry type="module" module-name="janus" />
-    <orderEntry type="module" module-name="nodeflux-aiortc" />
+    <orderEntry type="module" module-name="test" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />
