@@ -10,25 +10,24 @@ import tensorflow as tf
 import numpy as np
 import cv2
 import threading
+import aiohttp
 
 from aiohttp import web
 from av import VideoFrame
 
 from tensorflow import keras
-from gaze_tracking import GazeTracking
+from gaze_tracking import *
 from multiprocessing import Process, Queue
 import multiprocessing
 
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
-ROOT = os.path.dirname(__file__)
-
-logger = logging.getLogger("pc")
 pcs = set()
 
+
 """
-============================================================================================================================================
+===================================================================================================================================================================================================
 """
 
 Std_INFO = {
@@ -83,12 +82,10 @@ def face():
     global faceFlag, trackingFlag
     if faceFlag:
         faceFlag = False
-        print('change to false')
     else:
         faceFlag = True
         trackingFlag = True
-        print('change to true')
-    threading.Timer(0.25, face).start()
+    threading.Timer(0.5, face).start()
 
 class FaceDetector:
 
@@ -300,19 +297,18 @@ def eyetracking(frame):
 
     if trackingFlag:
         gaze.refresh(video)
-        #img = gaze.annotated_frame()
+        #video = gaze.annotated_frame()
         text = ""
 
         if gaze.is_right():
-            text = "Looking Right"
+            text = "Right"
         elif gaze.is_left():
-            text = "Looking Left"
-        elif gaze.is_bottom():
-            text = "Looking Bottom"
+            text = "Left"
         elif gaze.is_top():
-            text = "Looking Top"
+            text = "Top"
         elif gaze.is_center():
-            text = "Looking Center"
+            text = "Center"
+
         print(text)
         cv2.putText(video, text, (90, 60), cv2.FONT_HERSHEY_DUPLEX, 1.6, (147, 58, 31), 2)
 
@@ -380,13 +376,13 @@ def eyetracking(frame):
 
         if int(ang1) > 35 or int(ang1) < -35 or int(ang2) > 30:
             flag = True
-        #elif text == "Looking Center":
-        #    count = 0
-        #    flag = False
+        elif text == "Looking Center":
+            count = 0
+            flag = False
         else:
             flag = True
 
-        if count >= 5:
+        if count >= 4:
             video = cv2.cvtColor(video, cv2.COLOR_RGB2BGR)
             #response = requests.post(url=URL_EYE, data=json.dumps(Std_INFO), headers=headers)
             #res = json.loads(response.text)
@@ -404,160 +400,239 @@ def eyetracking(frame):
 ==========================================================================================================================================================================================
 """
 
+
+def transaction_id():
+    return "".join(random.choice(string.ascii_letters) for x in range(12))
+
 class VideoTransformTrack(MediaStreamTrack):
     """
     A video stream track that transforms frames from an another track.
     """
     kind = "video"
 
-
     def __init__(self, track):
         super().__init__()  # don't forget this!
         self.track = track
 
     async def recv(self):
-        global faceFlag, trackingFlag
-
         frame = await self.track.recv()
-        img = frame.to_ndarray(format="bgr24")
+        img = frame.to_ndarray(format="bgr24")      # videoframe reformat to ndarray
         rows = img.shape[0]
         height = img.shape[1]
         rgb = img.shape[2]
-        test = np.full((rows, height, rgb), img, np.uint8)
-
+        test = np.full((rows, height, rgb), img, np.uint8)   # ndarray to image data for openCV
         eyetracking(test)
-        cv2.imshow('janus', test)
+        cv2.imshow('janus',test)
         cv2.waitKey(1) & 0xFF
         return frame
 
+class JanusPlugin:
+    def __init__(self, session, url):
+        self._queue = asyncio.Queue()
+        self._session = session
+        self._url = url
 
-async def index(request):
-    content = open(os.path.join(ROOT, "index.html"), "r").read()
-    return web.Response(content_type="text/html", text=content)
+    async def send(self, payload):
+        message = {"janus": "message", "transaction": transaction_id()}
+        message.update(payload)
+        async with self._session._http.post(self._url, json=message) as response:
+            data = await response.json()
+            assert data["janus"] == "ack"
+
+        response = await self._queue.get()
+        assert response["transaction"] == message["transaction"]
+        return response
 
 
-async def javascript(request):
-    content = open(os.path.join(ROOT, "client.js"), "r").read()
-    return web.Response(content_type="application/javascript", text=content)
+class JanusSession:
+    def __init__(self, url):
+        self._http = None
+        self._poll_task = None
+        self._plugins = {}
+        self._root_url = url
+        self._session_url = None
+
+    async def attach(self, plugin_name: str) -> JanusPlugin:
+        message = {
+            "janus": "attach",
+            "plugin": plugin_name,
+            "transaction": transaction_id(),
+        }
+        async with self._http.post(self._session_url, json=message) as response:
+            data = await response.json()
+            assert data["janus"] == "success"
+            plugin_id = data["data"]["id"]
+            plugin = JanusPlugin(self, self._session_url + "/" + str(plugin_id))
+            self._plugins[plugin_id] = plugin
+            return plugin
+
+    async def create(self):
+        self._http = aiohttp.ClientSession()
+        message = {"janus": "create", "transaction": transaction_id()}
+        async with self._http.post(self._root_url, json=message) as response:
+            data = await response.json()
+            assert data["janus"] == "success"
+            session_id = data["data"]["id"]
+            self._session_url = self._root_url + "/" + str(session_id)
+
+        self._poll_task = asyncio.ensure_future(self._poll())
+
+    async def destroy(self):
+        if self._poll_task:
+            self._poll_task.cancel()
+            self._poll_task = None
+
+        if self._session_url:
+            message = {"janus": "destroy", "transaction": transaction_id()}
+            async with self._http.post(self._session_url, json=message) as response:
+                data = await response.json()
+                assert data["janus"] == "success"
+            self._session_url = None
+
+        if self._http:
+            await self._http.close()
+            self._http = None
+
+    async def _poll(self):
+        while True:
+            params = {"maxev": 1, "rid": int(time.time() * 1000)}
+            async with self._http.get(self._session_url, params=params) as response:
+                data = await response.json()
+                if data["janus"] == "event":
+                    plugin = self._plugins.get(data["sender"], None)
+                    if plugin:
+                        await plugin._queue.put(data)
+                    else:
+                        print(data)
 
 
-async def offer(request):
-    params = await request.json()
-    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-
+async def subscribe(session, room, feed):
     pc = RTCPeerConnection()
-    pc_id = "PeerConnection(%s)" % uuid.uuid4()
     pcs.add(pc)
-
-    def log_info(msg, *args):
-        logger.info(pc_id + " " + msg, *args)
-
-    log_info("Created for %s", request.remote)
-
-    # prepare local media
-    player = MediaPlayer(os.path.join(ROOT, "demo-instruct.wav"))
-    if args.write_audio:
-        recorder = MediaRecorder(args.write_audio)
-    else:
-        recorder = MediaBlackhole()
-
-    @pc.on("datachannel")
-    def on_datachannel(channel):
-        @channel.on("message")
-        def on_message(message):
-            if isinstance(message, str) and message.startswith("ping"):
-                channel.send("pong" + message[4:])
-
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        log_info("Connection state is %s", pc.connectionState)
-        if pc.connectionState == "failed":
-            await pc.close()
-            pcs.discard(pc)
-
+    print(session, feed)
     @pc.on("track")
-    def on_track(track):
-
-        log_info("Track %s received", track.kind)
-
-        if track.kind == "audio":
-            pc.addTrack(player.audio)
-            recorder.addTrack(track)
-        elif track.kind == "video":
-            local_video = VideoTransformTrack(
-                track
-            )
-            pc.addTrack(local_video)
-
-        @track.on("ended")
-        async def on_ended():
-            log_info("Track %s ended", track.kind)
-            await recorder.stop()
-
-    # handle offer
-    await pc.setRemoteDescription(offer)
-    await recorder.start()
-
-    # send answer
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-
-    return web.Response(
-        content_type="application/json",
-        text=json.dumps(
-            {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
-        ),
+    async def on_track(track):
+        print("Track %s received" % track.kind)
+        if track.kind == "video":
+            while True:
+                await VideoTransformTrack(track).recv()
+    # subscribe
+    plugin = await session.attach("janus.plugin.videoroom")
+    response = await plugin.send(
+        {"body": {"request": "join", "ptype": "subscriber", "room": room, "feed": feed}}
     )
 
+    # apply offer
+    await pc.setRemoteDescription(
+        RTCSessionDescription(
+            sdp=response["jsep"]["sdp"], type=response["jsep"]["type"]
+        )
+    )
 
-async def on_shutdown(app):
-    # close peer connections
-    coros = [pc.close() for pc in pcs]
-    await asyncio.gather(*coros)
-    pcs.clear()
+    # send answer
+    await pc.setLocalDescription(await pc.createAnswer())
+    response = await plugin.send(
+        {
+            "body": {"request": "start"},
+            "jsep": {
+                "sdp": pc.localDescription.sdp,
+                "trickle": False,
+                "type": pc.localDescription.type,
+            },
+        }
+    )
+    #await recorder.start()
+
+async def run(player, recorder, room, session):
+    await session.create()
+
+    # join video room
+    plugin = await session.attach("janus.plugin.videoroom")
+    response = await plugin.send(
+        {
+            "body": {
+                "display": "aiortc",
+                "ptype": "publisher",
+                "request": "join",
+                "room": room,
+            }
+        }
+    )
+
+    publishers = response["plugindata"]["data"]["publishers"]
+
+    for publisher in publishers:
+        print("id: %(id)s, display: %(display)s" % publisher)
+
+    maxlength = len(publishers)
+
+    print(maxlength)
+
+    # receive video
+    for index in range(0, maxlength):
+        if int(publishers[index]['display']) % 3 is 0:      # 학생별 display 값을 검사해서 webcam 스트림만 가져온다
+            await subscribe(
+                session=session, room=room, feed=publishers[0]["id"]
+            )
+
+
+    # exchange media for 10 minutes
+    #print("Exchanging media")
+    #await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Janus")
+    parser.add_argument("url", help="Janus root URL, e.g. http://localhost:8088/janus")
+    parser.add_argument(
+        "--room",
+        type=int,
+        default=1234,
+        help="The video room ID to join (default: 1234).",
+    ),
+    parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--record-to", help="Write received media to a file."),
+    parser.add_argument("--verbose", "-v", action="count")
+    args = parser.parse_args()
+
     mark_detector = MarkDetector()
-    # cap = cv2.VideoCapture(0)
-    # ret, img = cap.read()
-    # size = img.shape
     font = cv2.FONT_HERSHEY_SIMPLEX
     gaze = GazeTracking()
     state()
     face()
 
-    parser = argparse.ArgumentParser(
-        description="WebRTC audio / video / data-channels demo"
-    )
-    parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
-    parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
-    parser.add_argument(
-        "--host", default="localhost", help="Host for HTTP server (default: 0.0.0.0)"
-    )
-    parser.add_argument(
-        "--port", type=int, default=8080, help="Port for HTTP server (default: 8080)"
-    )
-    parser.add_argument("--verbose", "-v", action="count")
-    parser.add_argument("--write-audio", help="Write received audio to a file")
-    args = parser.parse_args()
-
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
 
-    if args.cert_file:
-        ssl_context = ssl.SSLContext()
-        ssl_context.load_cert_chain(args.cert_file, args.key_file)
-    else:
-        ssl_context = None
+    # create signaling and peer connection
+    session = JanusSession(args.url)
 
-    app = web.Application()
-    app.on_shutdown.append(on_shutdown)
-    app.router.add_get("/", index)
-    app.router.add_get("/client.js", javascript)
-    app.router.add_post("/offer", offer)
-    web.run_app(
-        app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
+    # create media source
+    if args.play_from:
+        player = MediaPlayer(args.play_from)
+    else:
+        player = None
+
+    # create media sink
+    if args.record_to:
+        recorder = MediaRecorder(args.record_to)
+    else:
+        recorder = None
+
+    loop = asyncio.get_event_loop()
+
+    #try:
+    task = loop.run_until_complete(
+        run(player=player, recorder=recorder, room=args.room, session=session)
     )
+    loop.run_forever()
+    # except KeyboardInterrupt:
+    #     pass
+    # finally:
+    #     if recorder is not None:
+    #         loop.run_until_complete(recorder.stop())
+    #     loop.run_until_complete(session.destroy())
+    #
+    #     # close peer connections
+    #     coros = [pc.close() for pc in pcs]
+    #     loop.run_until_complete(asyncio.gather(*coros))

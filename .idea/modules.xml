@@ -3,9 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/EyeTracking.iml" filepath="$PROJECT_DIR$/.idea/EyeTracking.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../Downloads/Gaze_Tracking-master/.idea/Gaze_Tracking-master.iml" filepath="$PROJECT_DIR$/../Downloads/Gaze_Tracking-master/.idea/Gaze_Tracking-master.iml" />
       <module fileurl="file://$PROJECT_DIR$/../aiortc/.idea/aiortc.iml" filepath="$PROJECT_DIR$/../aiortc/.idea/aiortc.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../janus/.idea/janus.iml" filepath="$PROJECT_DIR$/../janus/.idea/janus.iml" />
       <module fileurl="file://$PROJECT_DIR$/../Desktop/test/.idea/test.iml" filepath="$PROJECT_DIR$/../Desktop/test/.idea/test.iml" />
     </modules>
   </component>

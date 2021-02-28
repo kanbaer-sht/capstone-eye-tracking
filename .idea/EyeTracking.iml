@@ -4,10 +4,8 @@
     <content url="file://$MODULE_DIR$" />
     <orderEntry type="jdk" jdkName="Python 3.7" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="module" module-name="aiortc" />
-    <orderEntry type="module" module-name="Gaze_Tracking-master" />
-    <orderEntry type="module" module-name="janus" />
     <orderEntry type="module" module-name="test" />
+    <orderEntry type="module" module-name="aiortc" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />
