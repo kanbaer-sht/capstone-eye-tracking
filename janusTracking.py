@@ -85,7 +85,7 @@ def face():
     else:
         faceFlag = True
         trackingFlag = True
-    threading.Timer(0.5, face).start()
+    threading.Timer(0.25, face).start()
 
 class FaceDetector:
 
@@ -289,7 +289,7 @@ def draw_annotation_box(img, rotation_vector, translation_vector, camera_matrix,
 ==========================================================================================================================================================================================
 """
 
-def eyetracking(frame):
+def eyetracking(frame, s_number):
 
     global count, flag, ang1, ang2, eye_caution, faceFlag, trackingFlag
 
@@ -376,13 +376,13 @@ def eyetracking(frame):
 
         if int(ang1) > 35 or int(ang1) < -35 or int(ang2) > 30:
             flag = True
-        elif text == "Looking Center":
+        elif text == "Center":
             count = 0
             flag = False
         else:
             flag = True
 
-        if count >= 4:
+        if count >= 2:
             video = cv2.cvtColor(video, cv2.COLOR_RGB2BGR)
             #response = requests.post(url=URL_EYE, data=json.dumps(Std_INFO), headers=headers)
             #res = json.loads(response.text)
@@ -391,7 +391,7 @@ def eyetracking(frame):
             print(eye_caution)
             count = 0
 
-        cv2.imshow('test', video)
+        cv2.imshow(str(s_number) + 'eye', video)
         cv2.waitKey(1) & 0xFF
         trackingFlag = False
 
@@ -410,9 +410,10 @@ class VideoTransformTrack(MediaStreamTrack):
     """
     kind = "video"
 
-    def __init__(self, track):
+    def __init__(self, track, s_number):
         super().__init__()  # don't forget this!
         self.track = track
+        self.s_number = s_number
 
     async def recv(self):
         frame = await self.track.recv()
@@ -421,8 +422,9 @@ class VideoTransformTrack(MediaStreamTrack):
         height = img.shape[1]
         rgb = img.shape[2]
         test = np.full((rows, height, rgb), img, np.uint8)   # ndarray to image data for openCV
-        eyetracking(test)
-        cv2.imshow('janus',test)
+        print(self.s_number)
+        eyetracking(test, self.s_number)
+        cv2.imshow(str(self.s_number),test)
         cv2.waitKey(1) & 0xFF
         return frame
 
@@ -506,7 +508,7 @@ class JanusSession:
                         print(data)
 
 
-async def subscribe(session, room, feed):
+async def subscribe(session, room, feed, s_number):
     pc = RTCPeerConnection()
     pcs.add(pc)
     print(session, feed)
@@ -515,7 +517,7 @@ async def subscribe(session, room, feed):
         print("Track %s received" % track.kind)
         if track.kind == "video":
             while True:
-                await VideoTransformTrack(track).recv()
+                await VideoTransformTrack(track, s_number).recv()
     # subscribe
     plugin = await session.attach("janus.plugin.videoroom")
     response = await plugin.send(
@@ -572,7 +574,7 @@ async def run(player, recorder, room, session):
     for index in range(0, maxlength):
         if int(publishers[index]['display']) % 3 is 0:      # 학생별 display 값을 검사해서 webcam 스트림만 가져온다
             await subscribe(
-                session=session, room=room, feed=publishers[0]["id"]
+                session=session, room=room, feed=publishers[index]["id"], s_number=publishers[index]["display"]
             )
 
 
