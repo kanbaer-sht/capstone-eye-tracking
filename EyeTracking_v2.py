@@ -244,7 +244,7 @@ def draw_annotation_box(img, rotation_vector, translation_vector, camera_matrix,
 """
 
 mark_detector = MarkDetector()
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 ret, img = cap.read()
 size = img.shape
 font = cv2.FONT_HERSHEY_SIMPLEX
@@ -285,8 +285,8 @@ while eye_caution < 3:
         text = "Looking Right"
     elif gaze.is_left():
         text = "Looking Left"
-    elif gaze.is_bottom():
-        text = "Looking Bottom"
+    #elif gaze.is_bottom():
+    #    text = "Looking Bottom"
     elif gaze.is_top():
         text = "Looking Top"
     elif gaze.is_center():
@@ -377,9 +377,9 @@ while eye_caution < 3:
 
         if count >= 5:
             #img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            response = requests.post(url=URL_EYE, data=json.dumps(Std_INFO), headers=headers)
-            res = json.loads(response.text)
-            print(json.loads(response.text)[0])
+            #response = requests.post(url=URL_EYE, data=json.dumps(Std_INFO), headers=headers)
+            #res = json.loads(response.text)
+            #print(json.loads(response.text)[0])
             eye_caution += 1
             print(eye_caution)
             #print(res)
